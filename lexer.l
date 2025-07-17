@@ -8,28 +8,8 @@
 #include <sys/types.h>
 #include <utility>
 #include <string>
+#include "ttype.h"
 
-#define T_INT          1
-#define T_RETURN       2
-#define T_MAIN         3
-#define T_IDENTIFIER   4
-#define T_CONST        5
-#define T_PLUS         6
-#define T_MINUS        7
-#define T_MULTIPLY     8
-#define T_DIVIDE       9
-#define T_LT           10
-#define T_GT           11
-#define T_LE           12
-#define T_GE           13
-#define T_EQ           14
-#define T_NE           15
-#define T_ASSIGN       16
-#define T_END          17
-#define T_BLOCKL       18
-#define T_BLOCKR       19
-#define T_LPAREN       20
-#define T_RPAREN       21
 #define TRet std::pair<int,std::string>
 int yyFlexLexer::yywrap() { 
     return 1; 
@@ -41,27 +21,41 @@ integer     0|[1-9][0-9]*
 
 %%
 
-"int"       { printf(" %s ",yytext); return T_INT; }
-"return"    { printf(" %s ",yytext); return T_RETURN;}
-"main"      { printf(" %s ",yytext); return T_MAIN;}
-{identifier}  { printf(" %s ",yytext); return T_IDENTIFIER; }
-{integer}     { printf(" %s ",yytext); return T_CONST; }
-"+"     { printf(" %s ",yytext); return T_PLUS; }
-"-"     { printf(" %s ",yytext); return T_MINUS; }
-"*"     { printf(" %s ",yytext); return T_MULTIPLY; }
-"/"     { printf(" %s ",yytext); return T_DIVIDE; }
-"<"     { printf(" %s ",yytext); return T_LT; }
-">"     { printf(" %s ",yytext); return T_GT; }
-"<="    { printf(" %s ",yytext); return T_LE; }
-">="    { printf(" %s ",yytext); return T_GE; }
-"=="    { printf(" %s ",yytext); return T_EQ; }
-"!="    { printf(" %s ",yytext); return T_NE; }
-"="     { printf(" %s ",yytext); return T_ASSIGN; }
-";"     { printf(" %s ",yytext); return T_END; }
-"{"     { printf(" %s ",yytext); return T_BLOCKL; }
-"}"     { printf(" %s ",yytext); return T_BLOCKR; }
-"("     { printf(" %s ",yytext); return T_LPAREN; }
-")"     { printf(" %s ",yytext); return T_RPAREN; }
+"int"       { return T_INT; }
+"return"    { return T_RETURN;}
+"main"      { return T_MAIN;}
+"void"      {return T_VOID;}
+"if"
+"else"
+"while"
+"continue"
+"break"
+{identifier}  { return T_IDENTIFIER; }
+{integer}     { return T_CONST; }
+"+"     { return T_PLUS; }
+"-"     { return T_SUB; }
+"*"     { return T_MULTIPLY; }
+"/"     { return T_DIVIDE; }
+"<"     { return T_LT; }
+">"     { return T_GT; }
+"<="    { return T_LE; }
+">="    { return T_GE; }
+"=="    { return T_EQ; }
+"!="    { return T_NE; }
+"%"     { return T_MOD; }
+"&&"    {return T_LAND;}
+"||"    {return T_LOR;}
+"&"     { return T_AND; }
+"|"     { return T_OR; }
+"^"     { return T_XOR; }
+"="     { return T_ASSIGN; }
+";"     { return T_END; }
+"{"     { return T_BLOCKL; }
+"}"     { return T_BLOCKR; }
+"("     { return T_LPAREN; }
+")"     { return T_RPAREN; }
+"!"     { return T_LNOT;}
+"~"     {return T_BNOT;}
 [ \t\n]     ;
 
 %%

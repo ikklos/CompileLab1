@@ -11,8 +11,8 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR})
 FLEX_TARGET(MyScanner lexer.l ${CMAKE_CURRENT_BINARY_DIR}/lexer.cpp)
 add_compile_options(-pedantic)
-add_compile_options(-fsanitize=address)
-add_link_options(-fsanitize=address)
+# add_compile_options(-fsanitize=address)
+# add_link_options(-fsanitize=address)
 add_executable(Compilerlab1
     compilelab1.cpp
     ${FLEX_MyScanner_OUTPUTS}
