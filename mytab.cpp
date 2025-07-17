@@ -4,6 +4,7 @@ int MyTab::getLayer(){
 }
 void MyTab::in(){
     this->layer += 1;
+    this->localcounts.push(0);
 }
 int MyTab::out(){
     int res = 0;
@@ -16,44 +17,32 @@ int MyTab::out(){
                     mp[arr[i].name] = j+1;
                 }
             }
-            if(arr[i].type == "veri"){
-                rcount--;
-                res++;
-            }
+            res++;
             arr.pop_back();
         }
     }
     layer--;
+    localcounts.pop();
     return res;
 }
-void MyTab::reg(std::string str, std::string type, int args){
+void MyTab::reg(std::string str, std::string type, int argindex){
     int id = mp[str];
-    if(type == "func"){
-        if(!id){
-            SInfo info = {
-                str,
-                type,
-                -1,
-                layer,
-                args
-            };
-            arr.push_back(info);
-            mp[str] = arr.size();
-        }else{
-            printf("ERR: func redefined\n");
-        }
-    }else if(type == "veri"){
-        SInfo info = {
-            str,
-            type,
-            rcount++,
-            layer,
-            0
-        };
-        arr.push_back(info);
-        mp[str] = arr.size();
+    int p = 0;
+    if(type == "local"){
+        p = ++localcounts.top();
+    }else if(type == "arg"){
+        p = argindex;
     }
+    SInfo info = {
+        str,
+        type,
+        p,
+        layer
+    };
+    arr.push_back(info);
+    mp[str] = arr.size();
 }
+
 SInfo MyTab::acc(std::string str){
     int id = mp[str];
     if(id <= 0 || id > arr.size()){

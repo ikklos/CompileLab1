@@ -15,6 +15,7 @@ add_compile_options(-pedantic)
 # add_link_options(-fsanitize=address)
 add_executable(Compilerlab1
     compilelab1.cpp
+    mytab.cpp
     ${FLEX_MyScanner_OUTPUTS}
 )
 target_compile_features(Compilerlab1 PRIVATE cxx_std_14)

@@ -25,11 +25,11 @@ integer     0|[1-9][0-9]*
 "return"    { return T_RETURN;}
 "main"      { return T_MAIN;}
 "void"      {return T_VOID;}
-"if"
-"else"
-"while"
-"continue"
-"break"
+"if"        {return T_IF;}
+"else"      {return T_ELSE;}
+"while"     {return T_WHILE;}
+"continue"  {return T_CONTINUE;}
+"break"     {return T_BREAK;}
 {identifier}  { return T_IDENTIFIER; }
 {integer}     { return T_CONST; }
 "+"     { return T_PLUS; }
@@ -56,6 +56,7 @@ integer     0|[1-9][0-9]*
 ")"     { return T_RPAREN; }
 "!"     { return T_LNOT;}
 "~"     {return T_BNOT;}
+","     {return T_COMMA;}
 [ \t\n]     ;
 
 %%

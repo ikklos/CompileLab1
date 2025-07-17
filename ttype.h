@@ -35,5 +35,6 @@
 #define T_BNOT         33
 #define T_LAND         34
 #define T_LOR          35
+#define T_COMMA       36
 
 #endif
