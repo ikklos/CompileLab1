@@ -13,14 +13,17 @@ typedef struct SInfo{
 class MyTab{
 private:
     int layer = 0;
-    std::stack<int> localcounts;
+    int localcount = 0;
+    int argcount = 0;
     std::map<std::string, int> mp;
     std::vector<SInfo> arr;
 public:
     int getLayer();
-    void in();
-    int out();
-    void reg(std::string name, std::string type, int argindex);
+    void infunc();
+    void inblock();
+    int outfunc();
+    void outblock();
+    void reg(std::string name, std::string type);
     SInfo acc(std::string name);
 };
 #endif

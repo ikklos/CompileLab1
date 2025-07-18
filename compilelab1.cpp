@@ -1,5 +1,6 @@
 #include<iostream>
 #include<stack>
+#include<deque>
 #include"compilelab1.h"
 #include"mylexer.h"
 #include"ttype.h"
@@ -15,6 +16,12 @@ std::string getNewTag(){
 }
 std::vector<TokenInfo> tokens = std::vector<TokenInfo>();
 int cur = 0;
+std::deque<std::string> blockcache;
+std::vector<std::string> codeseg;
+std::stack<std::deque<std::string>> argStack;
+std::stack<std::pair<std::string,std::string>> whiletag;
+std::string nowVeri = "";
+std::string nowType = "local";
 bool start(){
     std::cout << "start" << std::endl;
     if(cur >= tokens.size())return false;
@@ -26,6 +33,7 @@ bool start(){
         return false;
     }
     if(!start1())return false;
+    
     return true;
 }
 bool func(){
@@ -50,20 +58,25 @@ bool start1(){//s'
 }
 bool IF(){
     TokenInfo info = tokens[cur++];
+    char temp[30];
+    int count;
     switch(info.id){
     case T_MAIN:
+        mytab.infunc();
         info = tokens[cur++];
         if(info.id != T_LPAREN) return false;
         info = tokens[cur++];
         if(info.id == T_INT){
             info = tokens[cur++];
             if(info.id != T_IDENTIFIER)return false;
+            mytab.reg(info.word,"arg");
             info = tokens[cur++];
             if(info.id != T_COMMA)return false;
             info = tokens[cur++];
             if(info.id != T_INT)return false;
             info = tokens[cur++];
             if(info.id != T_IDENTIFIER)return false;
+            mytab.reg(info.word,"arg");
             info = tokens[cur++];
             if(info.id != T_RPAREN)return false;
         }else if(info.id != T_RPAREN) return false;
@@ -72,9 +85,24 @@ bool IF(){
         if(!B())return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
+        count = mytab.outfunc();
+        codeseg.push_back("main:");
+        codeseg.push_back("push ebp");
+        codeseg.push_back("mov ebp,esp");
+        sprintf(temp,"sub esp,%d",(count+1)*4);
+        codeseg.push_back(temp);
+        while(!blockcache.empty()){
+            codeseg.push_back(blockcache.front());
+            blockcache.pop_front();
+        }
+        sprintf(temp,"add esp,%d",(count+1)*4);
+        codeseg.push_back(temp);
+        codeseg.push_back("ret");
         break;
     case T_IDENTIFIER:
-        return IF1();
+        nowVeri = info.word;
+        if(!IF1()) return false;
+        break;
     }
     return true;
 }
@@ -82,6 +110,7 @@ bool IF1(){
     TokenInfo info = tokens[cur];
     if(info.id == T_LPAREN){
         cur++;
+        mytab.infunc();
         if(!Args())return false;
         info = tokens[cur++];
         if(info.id != T_RPAREN)return false;
@@ -90,10 +119,21 @@ bool IF1(){
         if(!B())return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
-    }else if(info.id == T_END || info.id == T_ASSIGN || info.id == T_COMMA){
-        if(!B())return false;
-        cur++;
-    }
+        int count = mytab.outfunc();
+        char temp[30];
+        codeseg.push_back(nowVeri+":");
+        codeseg.push_back("push ebp");
+        codeseg.push_back("mov ebp,esp");
+        sprintf(temp,"sub esp,%d",(count+1)*4);
+        codeseg.push_back(temp);
+        while(!blockcache.empty()){
+            codeseg.push_back(blockcache.front());
+            blockcache.pop_front();
+        }
+        sprintf(temp,"add esp,%d",(count+1)*4);
+        codeseg.push_back(temp);
+        codeseg.push_back("ret");
+    }else return false;
     return true;
 }
 bool VF(){
@@ -102,6 +142,7 @@ bool VF(){
     if(info.id != T_IDENTIFIER){
         return false;
     }
+    std::string funcname = info.word;
     info = tokens[cur++];
     if(info.id != T_LPAREN)return false;
     if(!Args())return false;
@@ -112,16 +153,36 @@ bool VF(){
     if(!B1())return false;
     info = tokens[cur++];
     if(info.id != T_BLOCKR)return false;
+    int count;
+    char temp[30];
+    count = mytab.outfunc();
+    codeseg.push_back(funcname+":");
+    codeseg.push_back("push ebp");
+    codeseg.push_back("mov ebp,esp");
+    sprintf(temp,"sub esp,%d",(count+1)*4);
+    codeseg.push_back(temp);
+    while(!blockcache.empty()){
+        codeseg.push_back(blockcache.front());
+        blockcache.pop_front();
+    }
+    sprintf(temp,"add esp,%d",(count+1)*4);
+    codeseg.push_back(temp);
+    codeseg.push_back("ret");
     return true;
 }
 bool Dp1(){
     std::cout << "Dp1" << std::endl;
     TokenInfo info = tokens[cur];
-    if(info.id == T_END){
+    if(info.id == T_END || info.id == T_COMMA){
         if(!Dp2())return false;
     }else if(info.id == T_ASSIGN){
         cur++;
         if(!T())return false;
+        blockcache.push_back("pop eax");
+        SInfo sinfo = mytab.acc(nowVeri);
+        char temp[20];
+        sprintf(temp,"mov [ebp-%d],eax",sinfo.p*4);
+        blockcache.push_back(temp);
         if(!Dp2())return false;
     }
     return true;
@@ -131,6 +192,7 @@ bool Dp2(){
         return true;
     }
     if(tokens[cur++].id == T_COMMA){  //,idD1'
+        nowType = "local";
         TokenInfo info = tokens[cur++];
         if(info.id != T_IDENTIFIER)return false;
         if(tokens[cur].id == T_ASSIGN || tokens[cur].id == T_END){
@@ -185,16 +247,27 @@ bool A(){
     if(info.id == T_CONTINUE){
         info = tokens[cur++];
         if(info.id != T_END)return false;
+        if(!whiletag.empty()){
+            blockcache.push_back("jmp "+ whiletag.top().first);
+        }
         return true;
     }else if(info.id == T_BREAK){
         info = tokens[cur++];
         if(info.id != T_END)return false;
+        if(!whiletag.empty()){
+            blockcache.push_back("jmp "+ whiletag.top().second);
+        }
         return true;
-    }else if(info.id == T_IF || info.id == T_WHILE){
+    }else if(info.id == T_IF){
         TokenInfo temp = info;
+        std::string f = getNewTag();
         info = tokens[cur++];
         if(info.id != T_LPAREN)return false;
         if(!T())return false;
+        blockcache.push_back("pop eax");
+        blockcache.push_back("test eax");
+        blockcache.push_back("jne " + f);
+        mytab.inblock();
         info = tokens[cur++];
         if(info.id != T_RPAREN)return false;
         info = tokens[cur++];
@@ -202,7 +275,33 @@ bool A(){
         if(!B1())return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
-        return (temp.id==T_IF)?Ep():true;
+        blockcache.push_back(f+":");
+        mytab.outblock();
+        return Ep();
+    }else if(info.id == T_WHILE){
+        TokenInfo temp = info;
+        std::string t1 = getNewTag();
+        std::string t2 = getNewTag();
+        whiletag.push({t1,t2});
+        info = tokens[cur++];
+        if(info.id != T_LPAREN)return false;
+        blockcache.push_back(t1+":");
+        if(!T())return false;
+        blockcache.push_back("pop eax");
+        blockcache.push_back("test eax");
+        blockcache.push_back("je " + t2);
+        mytab.inblock();
+        info = tokens[cur++];
+        if(info.id != T_RPAREN)return false;
+        info = tokens[cur++];
+        if(info.id != T_BLOCKL)return false;
+        if(!B1())return false;
+        info = tokens[cur++];
+        if(info.id != T_BLOCKR)return false;
+        blockcache.push_back(t2+":");
+        whiletag.pop();
+        mytab.outblock();
+        return true;
     }
     return false;
 }
@@ -211,10 +310,11 @@ bool Ep(){
         cur++;
         TokenInfo info = tokens[cur++];
         if(info.id != T_BLOCKL)return false;
+        mytab.inblock();
         if(!B1())return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
-        if(!B1())return false;
+        mytab.outblock();
         return true;
     }else{
         if(tokens[cur].id == T_INT
@@ -225,7 +325,7 @@ bool Ep(){
         ||tokens[cur].id == T_IF
         ||tokens[cur].id == T_WHILE
         ||tokens[cur].id == T_BLOCKR){
-            return B1();
+            return true;
         }
     }
     return false;
@@ -236,6 +336,9 @@ bool Dp(){
     if(info.id != T_INT)return false;
     info = tokens[cur++];
     if(info.id != T_IDENTIFIER)return false;
+    nowVeri = info.word;
+    nowType = "local";
+    mytab.reg(nowVeri,nowType);
     if(!Dp1())return false;
     info = tokens[cur++];
     if(info.id != T_END)return false;
@@ -247,12 +350,14 @@ bool R(){
     if(!T())return false;
     info = tokens[cur++];
     if(info.id != T_END)return false;
+    blockcache.push_back("pop eax");
     return true;
 }
 bool E(){
     std::cout << "E" <<std::endl;
     TokenInfo info = tokens[cur++];
     if(info.id != T_IDENTIFIER)return false;
+    nowVeri = info.word;
     if(!P())return false;
     info = tokens[cur++];
     if(info.id != T_END)return false;
@@ -263,152 +368,200 @@ bool P(){
     TokenInfo info = tokens[cur++];
     if(info.id == T_LPAREN){
         if(!Tp())return false;
+        while(!argStack.empty()){
+            while(!argStack.top().empty()){
+                blockcache.push_back(argStack.top().front());
+                argStack.top().pop_front();
+            }
+            argStack.pop();
+        }
         info = tokens[cur++];
+        char temp[20];
         if(info.id != T_RPAREN)return false;
+        if(nowVeri == "println_int"){
+            blockcache.push_back("push eax");
+            blockcache.push_back("push offset format_str");
+            blockcache.push_back("call printf");
+        }else{
+            sprintf(temp,"call %s",nowVeri.c_str());
+            blockcache.push_back(temp);
+        }
     }else if(info.id == T_ASSIGN){
         if(!T())return false;
+        SInfo sinfo = mytab.acc(nowVeri);
+        blockcache.push_back("pop eax");
+        char temp[20];
+        sprintf(temp,"mov [ebp-%d],eax",sinfo.p*4);
+        blockcache.push_back(temp);
     }else return false;
     return true;
 }
 void OPoutput(int op){
     std::cout << "OP:" << op << std::endl;
     int num = opnum[op];
+    std::deque<std::string>& p = blockcache;
+    if(nowType == "ARG" && !argStack.empty()){
+        p = argStack.top();
+    }
     if(num == 1){
-        printf("pop eax\n");
+        p.push_back("pop eax\n");
     }else{
-        printf("pop ebx\npop eax\n");
+        p.push_back("pop ebx\npop eax\n");
     }
     std::string tag;
+    char temp[30];
     switch (op)
     {
     case T_PLUS:
-        printf("add eax,ebx\npush eax\n");
+        p.push_back("add eax,ebx\npush eax\n");
         break;
     case T_SUB:
-        printf("sub eax,ebx\npush eax\n");
+        p.push_back("sub eax,ebx\npush eax\n");
         break;
     case T_MULTIPLY:
-        printf("mul ebx\npush eax\n");
+        p.push_back("mul ebx\npush eax\n");
         break;
     case T_DIVIDE:
-        printf("div ebx\npush eax\n");
+        p.push_back("div ebx\npush eax\n");
         break;
     case T_LT:
-        printf("mov ecx,1\n");
-        printf("cmp eax,ebx\n");
+        p.push_back("mov ecx,1\n");
+        p.push_back("cmp eax,ebx\n");
         tag = getNewTag();
-        printf("jl %s\n",tag.c_str());
-        printf("dec ecx\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ecx\n");
+        sprintf(temp,"jl %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("dec ecx\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ecx\n");
         break;
     case T_GT:
-        printf("mov ecx,1\n");
-        printf("cmp eax,ebx\n");
+        p.push_back("mov ecx,1\n");
+        p.push_back("cmp eax,ebx\n");
         tag = getNewTag();
-        printf("jg %s\n",tag.c_str());
-        printf("dec ecx\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ecx\n");
+        sprintf(temp,"jg %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("dec ecx\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ecx\n");
         break;
     case T_LE:
-        printf("mov ecx,1\n");
-        printf("cmp eax,ebx\n");
+        p.push_back("mov ecx,1\n");
+        p.push_back("cmp eax,ebx\n");
         tag = getNewTag();
-        printf("jle %s\n",tag.c_str());
-        printf("dec ecx\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ecx\n");
+        sprintf(temp,"jle %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("dec ecx\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ecx\n");
         break;
     case T_GE:
-        printf("mov ecx,1\n");
-        printf("cmp eax,ebx\n");
+        p.push_back("mov ecx,1\n");
+        p.push_back("cmp eax,ebx\n");
         tag = getNewTag();
-        printf("jge %s\n",tag.c_str());
-        printf("dec ecx\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ecx\n");
+        sprintf(temp,"jge %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("dec ecx\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ecx\n");
         break;
     case T_EQ:
-        printf("mov ecx,1\n");
-        printf("cmp eax,ebx\n");
+        p.push_back("mov ecx,1\n");
+        p.push_back("cmp eax,ebx\n");
         tag = getNewTag();
-        printf("je %s\n",tag.c_str());
-        printf("dec ecx\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ecx\n");
+        sprintf(temp,"je %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("dec ecx\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ecx\n");
         break;
     case T_NE:
-        printf("mov ecx,1\n");
-        printf("cmp eax,ebx\n");
+        p.push_back("mov ecx,1\n");
+        p.push_back("cmp eax,ebx\n");
         tag = getNewTag();
-        printf("jne %s\n",tag.c_str());
-        printf("dec ecx\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ecx\n");
+        sprintf(temp,"jne %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("dec ecx\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ecx\n");
         break;
     case T_MOD:
-        printf("xor edx,edx\n");
-        printf("div ebx\n");
-        printf("push edx\n");
+        p.push_back("xor edx,edx\n");
+        p.push_back("div ebx\n");
+        p.push_back("push edx\n");
         break;
     case T_LAND:
-        printf("cmp eax,0\n");
+        p.push_back("cmp eax,0\n");
         tag = getNewTag();
-        printf("je %s\n",tag.c_str());
-        printf("mov eax,1\n");
-        printf("%s:\n",tag.c_str());
-        printf("cmp ebx,0\n");
+        sprintf(temp,"je %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("mov eax,1\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("cmp ebx,0\n");
         tag = getNewTag();
-        printf("je %s\n",tag.c_str());
-        printf("mov ebx,1\n");
-        printf("%s:\n",tag.c_str());
-        printf("and eax,ebx\n");
-        printf("push eax\n");
+        sprintf(temp,"je %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("mov ebx,1\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("and eax,ebx\n");
+        p.push_back("push eax\n");
         break;
     case T_LOR:
-        printf("cmp eax,0\n");
+        p.push_back("cmp eax,0\n");
         tag = getNewTag();
-        printf("je %s\n",tag.c_str());
-        printf("mov eax,1\n");
-        printf("%s:\n",tag.c_str());
-        printf("cmp ebx,0\n");
+        sprintf(temp,"je %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("mov eax,1\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("cmp ebx,0\n");
         tag = getNewTag();
-        printf("je %s\n",tag.c_str());
-        printf("mov ebx,1\n");
-        printf("%s:\n",tag.c_str());
-        printf("or eax,ebx\n");
-        printf("push eax\n");
+        sprintf(temp,"je %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("mov ebx,1\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("or eax,ebx\n");
+        p.push_back("push eax\n");
         break;
     case T_AND:
-        printf("and eax,ebx\n");
-        printf("push eax\n");
+        p.push_back("and eax,ebx\n");
+        p.push_back("push eax\n");
         break;
     case T_OR:
-        printf("or eax,ebx\n");
-        printf("push eax\n");
+        p.push_back("or eax,ebx\n");
+        p.push_back("push eax\n");
         break;
     case T_XOR:
-        printf("xor eax,ebx\n");
-        printf("push eax\n");
+        p.push_back("xor eax,ebx\n");
+        p.push_back("push eax\n");
         break;
     case T_LNOT:
-        printf("mov ebx,1\n");
+        p.push_back("mov ebx,1\n");
         tag = getNewTag();
-        printf("cmp eax,0\n");
-        printf("je %s\n",tag.c_str());
-        printf("mov ebx,0\n");
-        printf("%s:\n",tag.c_str());
-        printf("push ebx\n");
+        p.push_back("cmp eax,0\n");
+        sprintf(temp,"je %s\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("mov ebx,0\n");
+        sprintf(temp,"%s:\n",tag.c_str());
+        p.push_back(temp);
+        p.push_back("push ebx\n");
         break;
     case T_BNOT:
-        printf("not eax\n");
-        printf("push eax\n");
+        p.push_back("not eax\n");
+        p.push_back("push eax\n");
         break;
     case T_NEG:
-        printf("mov ebx,-1\n");
-        printf("mul ebx\n");
-        printf("push eax\n");
+        p.push_back("mov ebx,-1\n");
+        p.push_back("mul ebx\n");
+        p.push_back("push eax\n");
         break;
     default:
         break;
@@ -435,8 +588,7 @@ bool T(){
             }else{
                 TokenInfo info = tokens[cur++];
                 std::cout << info.word << std::endl;
-                //SInfo sinfo = mytab.acc(info.word);
-                SInfo sinfo = SInfo();
+                SInfo sinfo = mytab.acc(info.word);
                 if(sinfo.type == "global"){
                     printf("mov eax,[%s]\n",sinfo.name.c_str());
                     printf("push eax\n");
@@ -496,6 +648,7 @@ bool T(){
 }
 bool Args(){
     std::cout << "Args" << std::endl;
+    nowType = "arg";
     if(tokens[cur].id == T_INT){
         return D();
     }else if(tokens[cur].id == T_RPAREN){
@@ -510,14 +663,24 @@ bool Pp(){
     info = tokens[cur++];
     if(info.id != T_LPAREN)return false;
     if(!Tp())return false;
+    while(!argStack.empty()){
+        while(!argStack.top().empty()){
+            blockcache.push_back(argStack.top().front());
+            argStack.top().pop_front();
+        }
+        argStack.pop();
+    }
     info = tokens[cur++];
     if(info.id != T_RPAREN)return false;
     return true;
 }
 bool Tp(){
     std::cout << "Tp" << std::endl;
+    nowType = "ARG";
+    argStack.push(std::deque<std::string>());
     if(!T())return false;
     if(!Tp1())return false;
+    nowType = "";
     return true;
 }
 bool Tp1(){
@@ -537,6 +700,9 @@ bool D(){
     if(info.id != T_INT)return false;
     info = tokens[cur++];
     if(info.id != T_IDENTIFIER) return false;
+    if(nowType == "arg"){
+        mytab.reg(info.word,nowType);
+    }
     if(!D1())return false;
     return true;
 }
@@ -588,6 +754,15 @@ int main(){
     try{
         if(!start()){
             printf("ERR: failed!\n");
+        }else{
+            printf(".intel_syntax noprefix\n");
+            printf(".data\n");
+            printf("format_str:\n.asciz \"%%d\\n\"\n.extern printf\n");
+            printf(".text\n");
+            printf(".global main\n");
+            for(auto x: codeseg){
+                printf("%s\n",x.c_str());
+            }
         }
     }catch(std::runtime_error){
         printf("ERR: failed!\n");
