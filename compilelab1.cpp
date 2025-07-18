@@ -1,12 +1,13 @@
 #include<iostream>
 #include<stack>
 #include<deque>
+#include<fstream>
 #include"compilelab1.h"
 #include"mylexer.h"
 #include"ttype.h"
 int tagcount = 0;
-int lev[40];
-int opnum[40];
+int lev[50];
+int opnum[50];
 MyTab mytab;
 std::string getNewTag(){
     char s[20] = "";
@@ -93,8 +94,7 @@ bool IF(){
             codeseg.push_back(blockcache.front());
             blockcache.pop_front();
         }
-        sprintf(temp,"add esp,%d",(count+1)*4);
-        codeseg.push_back(temp);
+        codeseg.push_back("leave");
         codeseg.push_back("ret");
         break;
     case T_IDENTIFIER:
@@ -128,8 +128,7 @@ bool IF1(){
             codeseg.push_back(blockcache.front());
             blockcache.pop_front();
         }
-        sprintf(temp,"add esp,%d",(count+1)*4);
-        codeseg.push_back(temp);
+        codeseg.push_back("leave");
         codeseg.push_back("ret");
     }else return false;
     return true;
@@ -162,8 +161,7 @@ bool VF(){
         codeseg.push_back(blockcache.front());
         blockcache.pop_front();
     }
-    sprintf(temp,"add esp,%d",(count+1)*4);
-    codeseg.push_back(temp);
+    codeseg.push_back("leave");
     codeseg.push_back("ret");
     return true;
 }
@@ -190,6 +188,8 @@ bool Dp2(){
     if(tokens[cur++].id == T_COMMA){  //,idD1'
         nowType = "local";
         TokenInfo info = tokens[cur++];
+        nowVeri = info.word;
+        mytab.reg(nowVeri,"local");
         if(info.id != T_IDENTIFIER)return false;
         if(tokens[cur].id == T_ASSIGN || tokens[cur].id == T_END){
             return Dp1();
@@ -259,7 +259,7 @@ bool A(){
         if(info.id != T_LPAREN)return false;
         if(!T())return false;
         blockcache.push_back("pop eax");
-        blockcache.push_back("test eax");
+        blockcache.push_back("cmp eax,0");
         blockcache.push_back("je " + f);
         mytab.inblock();
         info = tokens[cur++];
@@ -285,7 +285,7 @@ bool A(){
         blockcache.push_back(t1+":");
         if(!T())return false;
         blockcache.push_back("pop eax");
-        blockcache.push_back("test eax");
+        blockcache.push_back("cmp eax,0");
         blockcache.push_back("je " + t2);
         mytab.inblock();
         info = tokens[cur++];
@@ -293,6 +293,7 @@ bool A(){
         info = tokens[cur++];
         if(info.id != T_BLOCKL)return false;
         if(!B1())return false;
+        blockcache.push_back("jmp " + t1);
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
         blockcache.push_back(t2+":");
@@ -419,9 +420,11 @@ void OPoutput(int op){
         p->push_back("sub eax,ebx\npush eax");
         break;
     case T_MULTIPLY:
+        p->push_back("xor edx,edx");
         p->push_back("mul ebx\npush eax");
         break;
     case T_DIVIDE:
+        p->push_back("xor edx,edx");
         p->push_back("div ebx\npush eax");
         break;
     case T_LT:
@@ -578,7 +581,8 @@ bool T(){
     }
     while(cur < tokens.size()){
         if(tokens[cur].id == T_END
-            ||(tokens[cur].id == T_RPAREN && lcount==0)){
+            ||(tokens[cur].id == T_RPAREN && lcount==0)
+            ||(tokens[cur].id == T_COMMA)){
             while(!stk.empty()){
                 OPoutput(stk.top().first);
                 stk.pop();
@@ -731,7 +735,7 @@ bool D1(){
     if(!D())return false;
     return true;
 }
-int main(){
+int main(int argc, char * argv[]){
     //初始化
     for(int i = 0; i < 40; i++){
         lev[i] = 0;
@@ -756,6 +760,16 @@ int main(){
     //词法分析
     int i = 0;
     MyLexer lexer;
+    std::ifstream inputfile;
+    if(argc){
+        inputfile.open(argv[1]);
+        if (!inputfile.is_open()) {
+            std::cout << "错误：无法打开文件 " << argv[1] << std::endl;
+            return 1;
+        }
+        lexer.switch_streams(&inputfile);
+        lexer.yyrestart(&inputfile);
+    }
     do{
         i = lexer.yylex();
         if(i != 0){
@@ -765,21 +779,25 @@ int main(){
             });
         }
     }while(i != 0);
+    inputfile.close();
     //语法分析
     try{
         if(!start()){
             printf("ERR: failed!\n");
         }else{
             printf(".intel_syntax noprefix\n");
-            printf(".data\n");
-            printf("format_str:\n.asciz \"%%d\\n\"\n.extern printf\n");
-            printf(".text\n");
             printf(".global main\n");
+            printf(".extern printf\n");
+            printf(".align 4\n");
+            printf(".data\n");
+            printf("format_str:\n.asciz \"%%d\\n\"\n");
+            printf(".text\n");
+            
             for(auto x: codeseg){
                 printf("%s\n",x.c_str());
             }
         }
-    }catch(std::runtime_error){
+    }catch(std::runtime_error e){
         printf("ERR: failed!\n");
     }
     return 0;
