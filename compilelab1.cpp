@@ -19,11 +19,11 @@ int cur = 0;
 std::deque<std::string> blockcache;
 std::vector<std::string> codeseg;
 std::stack<std::deque<std::string>> argStack;
+std::stack<int>argCount;
 std::stack<std::pair<std::string,std::string>> whiletag;
 std::string nowVeri = "";
 std::string nowType = "local";
 bool start(){
-    std::cout << "start" << std::endl;
     if(cur >= tokens.size())return false;
     int id = tokens[cur].id;
     if(id != T_INT && id != T_VOID){
@@ -37,7 +37,6 @@ bool start(){
     return true;
 }
 bool func(){
-    std::cout << "func" << std::endl;
     int id = tokens[cur++].id;
     if(id == T_INT){
         return IF();
@@ -47,7 +46,6 @@ bool func(){
     return false;
 }
 bool start1(){//s'
-    std::cout << "start1" << std::endl;
     if(cur >= tokens.size()){
         return true;
     }
@@ -137,7 +135,6 @@ bool IF1(){
     return true;
 }
 bool VF(){
-    std::cout << "VF" << std::endl; 
     TokenInfo info = tokens[cur++];
     if(info.id != T_IDENTIFIER){
         return false;
@@ -171,7 +168,6 @@ bool VF(){
     return true;
 }
 bool Dp1(){
-    std::cout << "Dp1" << std::endl;
     TokenInfo info = tokens[cur];
     if(info.id == T_END || info.id == T_COMMA){
         if(!Dp2())return false;
@@ -202,7 +198,6 @@ bool Dp2(){
     return false;
 }
 bool B1(){
-    std::cout << "B1" <<std::endl;
     if(tokens[cur].id == T_BLOCKR){ //epsilon
         return true;
     }
@@ -218,7 +213,6 @@ bool B1(){
     return false;
 }
 bool B(){
-    std::cout << "B" << std::endl;
     if(tokens[cur].id == T_INT
     ||tokens[cur].id == T_RETURN
     ||tokens[cur].id == T_IDENTIFIER
@@ -233,7 +227,6 @@ bool B(){
     return false;
 }
 bool A(){
-    std::cout << "A" << std::endl;
     if(tokens[cur].id == T_INT && Dp()){
         return true;
     }
@@ -261,12 +254,13 @@ bool A(){
     }else if(info.id == T_IF){
         TokenInfo temp = info;
         std::string f = getNewTag();
+        std::string skip = getNewTag();
         info = tokens[cur++];
         if(info.id != T_LPAREN)return false;
         if(!T())return false;
         blockcache.push_back("pop eax");
         blockcache.push_back("test eax");
-        blockcache.push_back("jne " + f);
+        blockcache.push_back("je " + f);
         mytab.inblock();
         info = tokens[cur++];
         if(info.id != T_RPAREN)return false;
@@ -275,9 +269,12 @@ bool A(){
         if(!B1())return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
+        blockcache.push_back("jmp "+ skip);
         blockcache.push_back(f+":");
         mytab.outblock();
-        return Ep();
+        if(!Ep())return false;
+        blockcache.push_back(skip+":");
+        return true;
     }else if(info.id == T_WHILE){
         TokenInfo temp = info;
         std::string t1 = getNewTag();
@@ -331,7 +328,6 @@ bool Ep(){
     return false;
 }
 bool Dp(){
-    std::cout << "Dp" << std::endl;
     TokenInfo info = tokens[cur++];
     if(info.id != T_INT)return false;
     info = tokens[cur++];
@@ -354,7 +350,6 @@ bool R(){
     return true;
 }
 bool E(){
-    std::cout << "E" <<std::endl;
     TokenInfo info = tokens[cur++];
     if(info.id != T_IDENTIFIER)return false;
     nowVeri = info.word;
@@ -364,26 +359,32 @@ bool E(){
     return true;
 }
 bool P(){
-    std::cout << "P" << std::endl;
     TokenInfo info = tokens[cur++];
     if(info.id == T_LPAREN){
+        argCount.push(0);
         if(!Tp())return false;
-        while(!argStack.empty()){
+        int count = 0;
+        while(argCount.top() > 0){
             while(!argStack.top().empty()){
                 blockcache.push_back(argStack.top().front());
                 argStack.top().pop_front();
             }
             argStack.pop();
+            argCount.top()--;
+            count++;
         }
+        argCount.pop();
         info = tokens[cur++];
         char temp[20];
         if(info.id != T_RPAREN)return false;
         if(nowVeri == "println_int"){
-            blockcache.push_back("push eax");
             blockcache.push_back("push offset format_str");
             blockcache.push_back("call printf");
+            blockcache.push_back("add esp,8");
         }else{
             sprintf(temp,"call %s",nowVeri.c_str());
+            blockcache.push_back(temp);
+            sprintf(temp,"add esp,%d",count*4);
             blockcache.push_back(temp);
         }
     }else if(info.id == T_ASSIGN){
@@ -397,181 +398,184 @@ bool P(){
     return true;
 }
 void OPoutput(int op){
-    std::cout << "OP:" << op << std::endl;
     int num = opnum[op];
-    std::deque<std::string>& p = blockcache;
-    if(nowType == "ARG" && !argStack.empty()){
-        p = argStack.top();
+    std::deque<std::string>* p = &blockcache;
+    if(!argStack.empty()){
+        p = &argStack.top();
     }
     if(num == 1){
-        p.push_back("pop eax\n");
+        p->push_back("pop eax");
     }else{
-        p.push_back("pop ebx\npop eax\n");
+        p->push_back("pop ebx\npop eax");
     }
     std::string tag;
     char temp[30];
     switch (op)
     {
     case T_PLUS:
-        p.push_back("add eax,ebx\npush eax\n");
+        p->push_back("add eax,ebx\npush eax");
         break;
     case T_SUB:
-        p.push_back("sub eax,ebx\npush eax\n");
+        p->push_back("sub eax,ebx\npush eax");
         break;
     case T_MULTIPLY:
-        p.push_back("mul ebx\npush eax\n");
+        p->push_back("mul ebx\npush eax");
         break;
     case T_DIVIDE:
-        p.push_back("div ebx\npush eax\n");
+        p->push_back("div ebx\npush eax");
         break;
     case T_LT:
-        p.push_back("mov ecx,1\n");
-        p.push_back("cmp eax,ebx\n");
+        p->push_back("mov ecx,1");
+        p->push_back("cmp eax,ebx");
         tag = getNewTag();
-        sprintf(temp,"jl %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("dec ecx\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ecx\n");
+        sprintf(temp,"jl %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("dec ecx");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ecx");
         break;
     case T_GT:
-        p.push_back("mov ecx,1\n");
-        p.push_back("cmp eax,ebx\n");
+        p->push_back("mov ecx,1");
+        p->push_back("cmp eax,ebx");
         tag = getNewTag();
-        sprintf(temp,"jg %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("dec ecx\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ecx\n");
+        sprintf(temp,"jg %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("dec ecx");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ecx");
         break;
     case T_LE:
-        p.push_back("mov ecx,1\n");
-        p.push_back("cmp eax,ebx\n");
+        p->push_back("mov ecx,1");
+        p->push_back("cmp eax,ebx");
         tag = getNewTag();
-        sprintf(temp,"jle %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("dec ecx\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ecx\n");
+        sprintf(temp,"jle %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("dec ecx");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ecx");
         break;
     case T_GE:
-        p.push_back("mov ecx,1\n");
-        p.push_back("cmp eax,ebx\n");
+        p->push_back("mov ecx,1");
+        p->push_back("cmp eax,ebx");
         tag = getNewTag();
-        sprintf(temp,"jge %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("dec ecx\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ecx\n");
+        sprintf(temp,"jge %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("dec ecx");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ecx");
         break;
     case T_EQ:
-        p.push_back("mov ecx,1\n");
-        p.push_back("cmp eax,ebx\n");
+        p->push_back("mov ecx,1");
+        p->push_back("cmp eax,ebx");
         tag = getNewTag();
-        sprintf(temp,"je %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("dec ecx\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ecx\n");
+        sprintf(temp,"je %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("dec ecx");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ecx");
         break;
     case T_NE:
-        p.push_back("mov ecx,1\n");
-        p.push_back("cmp eax,ebx\n");
+        p->push_back("mov ecx,1");
+        p->push_back("cmp eax,ebx");
         tag = getNewTag();
-        sprintf(temp,"jne %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("dec ecx\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ecx\n");
+        sprintf(temp,"jne %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("dec ecx");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ecx");
         break;
     case T_MOD:
-        p.push_back("xor edx,edx\n");
-        p.push_back("div ebx\n");
-        p.push_back("push edx\n");
+        p->push_back("xor edx,edx");
+        p->push_back("div ebx");
+        p->push_back("push edx");
         break;
     case T_LAND:
-        p.push_back("cmp eax,0\n");
+        p->push_back("cmp eax,0");
         tag = getNewTag();
-        sprintf(temp,"je %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("mov eax,1\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("cmp ebx,0\n");
+        sprintf(temp,"je %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("mov eax,1");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("cmp ebx,0");
         tag = getNewTag();
-        sprintf(temp,"je %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("mov ebx,1\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("and eax,ebx\n");
-        p.push_back("push eax\n");
+        sprintf(temp,"je %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("mov ebx,1");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("and eax,ebx");
+        p->push_back("push eax");
         break;
     case T_LOR:
-        p.push_back("cmp eax,0\n");
+        p->push_back("cmp eax,0");
         tag = getNewTag();
-        sprintf(temp,"je %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("mov eax,1\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("cmp ebx,0\n");
+        sprintf(temp,"je %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("mov eax,1");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("cmp ebx,0");
         tag = getNewTag();
-        sprintf(temp,"je %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("mov ebx,1\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("or eax,ebx\n");
-        p.push_back("push eax\n");
+        sprintf(temp,"je %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("mov ebx,1");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("or eax,ebx");
+        p->push_back("push eax");
         break;
     case T_AND:
-        p.push_back("and eax,ebx\n");
-        p.push_back("push eax\n");
+        p->push_back("and eax,ebx");
+        p->push_back("push eax");
         break;
     case T_OR:
-        p.push_back("or eax,ebx\n");
-        p.push_back("push eax\n");
+        p->push_back("or eax,ebx");
+        p->push_back("push eax");
         break;
     case T_XOR:
-        p.push_back("xor eax,ebx\n");
-        p.push_back("push eax\n");
+        p->push_back("xor eax,ebx");
+        p->push_back("push eax");
         break;
     case T_LNOT:
-        p.push_back("mov ebx,1\n");
+        p->push_back("mov ebx,1");
         tag = getNewTag();
-        p.push_back("cmp eax,0\n");
-        sprintf(temp,"je %s\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("mov ebx,0\n");
-        sprintf(temp,"%s:\n",tag.c_str());
-        p.push_back(temp);
-        p.push_back("push ebx\n");
+        p->push_back("cmp eax,0");
+        sprintf(temp,"je %s",tag.c_str());
+        p->push_back(temp);
+        p->push_back("mov ebx,0");
+        sprintf(temp,"%s:",tag.c_str());
+        p->push_back(temp);
+        p->push_back("push ebx");
         break;
     case T_BNOT:
-        p.push_back("not eax\n");
-        p.push_back("push eax\n");
+        p->push_back("not eax");
+        p->push_back("push eax");
         break;
     case T_NEG:
-        p.push_back("mov ebx,-1\n");
-        p.push_back("mul ebx\n");
-        p.push_back("push eax\n");
+        p->push_back("mov ebx,-1");
+        p->push_back("mul ebx");
+        p->push_back("push eax");
         break;
     default:
         break;
     };
 }
 bool T(){
-    std::cout << "T" << std::endl;
     int lcount = 0;
     int idcount = 0;
     std::stack<std::pair<int,int>> stk;
+    std::deque<std::string>* p = &blockcache;
+    char temp[30];
+    if(!argStack.empty()){
+        p = &(argStack.top());
+    }
     while(cur < tokens.size()){
         if(tokens[cur].id == T_END
             ||(tokens[cur].id == T_RPAREN && lcount==0)){
@@ -584,38 +588,46 @@ bool T(){
         if(tokens[cur].id == T_IDENTIFIER){
             if(cur+1 < tokens.size() && tokens[cur+1].id == T_LPAREN){
                 if(!Pp())return false;
-                printf("push eax\n");
+                p->push_back("push eax");
+                // std::cout << "show:" << std::endl;
+                // for(auto x: blockcache){
+                //     std::cout << x << std::endl;
+                // }
+                // std::cout << "----" << std::endl;
             }else{
                 TokenInfo info = tokens[cur++];
-                std::cout << info.word << std::endl;
                 SInfo sinfo = mytab.acc(info.word);
                 if(sinfo.type == "global"){
-                    printf("mov eax,[%s]\n",sinfo.name.c_str());
-                    printf("push eax\n");
+                    sprintf(temp,"mov eax,[%s]",sinfo.name.c_str());
+                    p->push_back(temp);
+                    p->push_back("push eax");
                 }else if(sinfo.type == "local"){
-                    printf("mov eax,DWORD PTR[ebp-%d]\n",sinfo.p*4);
-                    printf("push eax\n");
+                    sprintf(temp,"mov eax,DWORD PTR[ebp-%d]",sinfo.p*4);
+                    p->push_back(temp);
+                    p->push_back("push eax");
                 }else if(sinfo.type == "arg"){
-                    printf("mov eax,DWORD PTR[ebp+%d]\n",(sinfo.p+1)*4);
-                    printf("push eax\n");
+                    sprintf(temp,"mov eax,DWORD PTR[ebp+%d]",(sinfo.p+1)*4);
+                    p->push_back(temp);
+                    p->push_back("push eax");
                 }
             }
         }else{
             TokenInfo info = tokens[cur++];
             if(info.id == T_CONST){
-                printf("push %s\n",info.word.c_str());
+                sprintf(temp,"push %s",info.word.c_str());
+                p->push_back(temp);
             }else{
                 if(info.id == T_SUB){
                     if(tokens[cur-2].id == T_RPAREN 
                     || tokens[cur-2].id == T_IDENTIFIER){
-                        stk.push({T_NEG,lev[T_NEG]});
-                    }else{
                         while(!stk.empty()){
                             if(stk.top().second > lev[T_SUB])break;
                             OPoutput(stk.top().first);
                             stk.pop();
                         }
                         stk.push({T_SUB,lev[T_SUB]});
+                    }else{
+                        stk.push({T_NEG,lev[T_NEG]});
                     }
                 }else if(info.id == T_LPAREN){
                     lcount++;
@@ -647,7 +659,6 @@ bool T(){
     return false;
 }
 bool Args(){
-    std::cout << "Args" << std::endl;
     nowType = "arg";
     if(tokens[cur].id == T_INT){
         return D();
@@ -657,35 +668,41 @@ bool Args(){
     return false;
 }
 bool Pp(){
-    std::cout << "Pp" << std::endl;
     TokenInfo info = tokens[cur++];
+    char temp[30];
+    int argcount = 0;
     if(info.id != T_IDENTIFIER)return false;
+    std::string funcname = info.word;
     info = tokens[cur++];
     if(info.id != T_LPAREN)return false;
+    argCount.push(0);
     if(!Tp())return false;
-    while(!argStack.empty()){
+    while(argCount.top()){
         while(!argStack.top().empty()){
             blockcache.push_back(argStack.top().front());
             argStack.top().pop_front();
         }
         argStack.pop();
+        argcount++;
+        argCount.top()--;
     }
+    argCount.pop();
+    sprintf(temp,"call %s",funcname.c_str());
+    blockcache.push_back(temp);
+    sprintf(temp,"add esp,%d",argcount*4);
+    blockcache.push_back(temp);
     info = tokens[cur++];
     if(info.id != T_RPAREN)return false;
     return true;
 }
 bool Tp(){
-    std::cout << "Tp" << std::endl;
-    nowType = "ARG";
     argStack.push(std::deque<std::string>());
+    argCount.top()++;
     if(!T())return false;
     if(!Tp1())return false;
-    nowType = "";
     return true;
 }
 bool Tp1(){
-    std::cout << "Tp1" << std::endl;
-    std::cout << tokens[cur].word << std::endl;
     if(tokens[cur].id == T_RPAREN){
         return true;
     }
@@ -695,7 +712,6 @@ bool Tp1(){
     return true;
 }
 bool D(){
-    std::cout << "D" << std::endl;
     TokenInfo info = tokens[cur++];
     if(info.id != T_INT)return false;
     info = tokens[cur++];
@@ -707,7 +723,6 @@ bool D(){
     return true;
 }
 bool D1(){
-    std::cout << "D1" << std::endl;
     if(tokens[cur].id == T_RPAREN){
         return true;
     }
@@ -732,6 +747,7 @@ int main(){
     lev[T_OR] = 9;
     lev[T_LAND] = 10;
     lev[T_LOR] = 11;
+    lev[T_RPAREN] = 12;
     opnum[T_DIVIDE] = opnum[T_MULTIPLY] = opnum[T_MOD] = opnum[T_PLUS]
     =opnum[T_SUB] = opnum[T_LT] = opnum[T_GT] = opnum[T_LE] = opnum[T_GE]
     =opnum[T_EQ] = opnum[T_NE] = opnum[T_AND] = opnum[T_XOR] = opnum[T_OR]
@@ -747,7 +763,6 @@ int main(){
                 lexer.getYYText(),
                 i
             });
-            std::cout << lexer.getYYText() << " " << i << std::endl;
         }
     }while(i != 0);
     //语法分析

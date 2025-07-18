@@ -1,20 +1,12 @@
-void abkkk(int a){
-    int i = a;
+int calc(int a){
+    return a*2;
 }
 int main()
 {
-    int c = 1;
-    int abc = 22 + (111 + c) * 2;
-    if(!abc){
-        abkkk(abc);
-        if(1){
-
-        }else{
-
-        }
-        while(1+1){
-            break;
-        }
+    int a = 1;
+    if(a > 0){
+        println_int(1);
     }
+    println_int(calc(a)-a);
     return 0;
 }
