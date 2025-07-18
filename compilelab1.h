@@ -22,12 +22,15 @@ bool B1();      //B'->epsilon|B
 bool B();       //B->AB'
 bool A();       //A->D'|R|E|continue;|break;|if(T){B'}E'|while(T){B'}
 bool Ep();      //E'->else{B'}B'|B'
-bool Dp();      //D'->int id D1'
+bool Dp();      //D'->int id D1';
 bool R();       //R->return T;
 bool E();       //E->id P;
-bool P();       //P->(T)|=T
+bool P();       //P->(T')|=T
 bool T();       //表达式
 bool Args();    //Args->D|epsilon
+bool Pp();      //P'->id(T')
+bool Tp();      //T'->TT1'
+bool Tp1();     //T1'->epsilon|,T'
 bool D();       //D->int id D1
 bool D1();      //D1->epsilon|,D
 #endif

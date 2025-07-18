@@ -80,7 +80,7 @@ bool IF1(){
         if(info.id != T_RPAREN)return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKL)return false;
-        if(!B)return false;
+        if(!B())return false;
         info = tokens[cur++];
         if(info.id != T_BLOCKR)return false;
     }else if(info.id == T_END || info.id == T_ASSIGN || info.id == T_COMMA){
@@ -218,28 +218,91 @@ bool Ep(){
     return false;
 }
 bool Dp(){
-
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_INT)return false;
+    info = tokens[cur++];
+    if(info.id != T_IDENTIFIER)return false;
+    if(!Dp1())return false;
+    info = tokens[cur++];
+    if(info.id != T_END)return false;
+    return true;
 }
 bool R(){
-
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_RETURN)return false;
+    if(!T())return false;
+    info = tokens[cur++];
+    if(info.id != T_END)return false;
+    return true;
 }
 bool E(){
-
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_IDENTIFIER)return false;
+    if(!P())return false;
+    if(info.id != T_END)return false;
+    return true;
 }
 bool P(){
-
+    TokenInfo info = tokens[cur++];
+    if(info.id == T_LPAREN){
+        if(!Tp())return false;
+        info = tokens[cur++];
+        if(info.id != T_RPAREN)return false;
+        info = tokens[cur++];
+    }else if(info.id == T_ASSIGN){
+        if(!T())return false;
+    }else return false;
+    return true;
 }
 bool T(){
 
 }
 bool Args(){
-
+    if(tokens[cur].id == T_INT){
+        return D();
+    }else if(tokens[cur].id == T_RPAREN){
+        return true;
+    }
+    return false;
+}
+bool Pp(){
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_IDENTIFIER)return false;
+    info = tokens[cur++];
+    if(info.id != T_LPAREN)return false;
+    if(!Tp())return false;
+    info = tokens[cur++];
+    if(info.id != T_RPAREN)return false;
+}
+bool Tp(){
+    if(!T())return false;
+    if(!Tp1())return false;
+    return true;
+}
+bool Tp1(){
+    if(tokens[cur].id == T_RPAREN){
+        return true;
+    }
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_COMMA)return false;
+    if(!Tp())return false;
+    return true;
 }
 bool D(){
-
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_INT)return false;
+    info = tokens[cur++];
+    if(info.id != T_IDENTIFIER) return false;
+    if(!D1())return false;
 }
 bool D1(){
-
+    if(tokens[cur].id == T_RPAREN){
+        return true;
+    }
+    TokenInfo info = tokens[cur++];
+    if(info.id != T_COMMA)return false;
+    if(!D())return false;
+    return true;
 }
 int main(){
     //词法分析
