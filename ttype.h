@@ -36,5 +36,6 @@
 #define T_LAND         34
 #define T_LOR          35
 #define T_COMMA       36
+#define T_NEG          37
 
 #endif
